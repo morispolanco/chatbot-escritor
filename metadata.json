@@ -1,0 +1,7 @@
+{
+  "name": "Chatbot Escritor",
+  "description": "An interactive assistant for writing scientific or academic articles, guiding the user through structured questions to build a complete article. The chatbot uses an AI to understand and organize user responses, generating coherent content that can be exported to a Word document.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
