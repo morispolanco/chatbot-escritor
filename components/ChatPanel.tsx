@@ -2,16 +2,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import type { Message, AppState, GuidedQuestion } from '../types';
 import { MessageSender } from '../types';
-import { BotIcon, UploadIcon, MicrophoneIcon, SendIcon, RestartIcon } from './icons';
+import { BotIcon, UploadIcon, RestartIcon } from './icons';
 import { AppState as AppStates } from '../types';
-
-// Add SpeechRecognition types to the window object for browsers that support it.
-declare global {
-    interface Window {
-        SpeechRecognition: any;
-        webkitSpeechRecognition: any;
-    }
-}
 
 interface ChatPanelProps {
   messages: Message[];
@@ -109,82 +101,17 @@ const DictationInput: React.FC<{
     disabled: boolean;
     isInReviewLoop: boolean;
 }> = ({ value, onDictatedText, onPolish, onAdvance, disabled, isInReviewLoop }) => {
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const textBeforeListenRef = useRef<string>(''); // To store text before starting dictation
-
-  // Setup recognition engine once on mount
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("Speech Recognition not supported by this browser.");
-      return;
-    }
-
-    recognitionRef.current = new SpeechRecognition();
-    const recognition = recognitionRef.current;
-    
-    recognition.continuous = true; // Key change: Keep listening.
-    recognition.lang = 'es-ES';
-    recognition.interimResults = true; // Key change: Show interim results for better UX.
-
-    recognition.onresult = (event: any) => {
-      let transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        transcript += event.results[i][0].transcript;
-      }
-      
-      const separator = textBeforeListenRef.current.trim() ? ' ' : '';
-      onDictatedText(textBeforeListenRef.current + separator + transcript);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error);
-      setIsListening(false);
-    };
-    
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    // Cleanup on unmount
-    return () => {
-      recognition?.stop();
-    };
-  }, [onDictatedText]);
-
-  const toggleListen = () => {
-    if (disabled) return;
-    if (isListening) {
-      recognitionRef.current?.stop();
-    } else {
-      textBeforeListenRef.current = value; // Capture current text from props
-      recognitionRef.current?.start();
-      setIsListening(true);
-    }
-  };
 
   return (
     <div className='space-y-3'>
-        <div className="flex items-center space-x-2">
-            <textarea
-                value={value}
-                onChange={(e) => onDictatedText(e.target.value)}
-                placeholder={isInReviewLoop ? "Aplica las sugerencias o haz tus propios cambios aquí..." : "Describe esta sección con tu propio estilo..."}
-                className="flex-grow p-2 text-sm bg-white border border-slate-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
-                rows={4}
-                disabled={disabled}
-            />
-            <button
-                onClick={toggleListen}
-                type="button"
-                className="p-2 rounded-full hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                aria-label="Dictar por voz"
-                disabled={disabled}
-            >
-                <MicrophoneIcon isListening={isListening} />
-            </button>
-        </div>
+        <textarea
+            value={value}
+            onChange={(e) => onDictatedText(e.target.value)}
+            placeholder={isInReviewLoop ? "Aplica las sugerencias o haz tus propios cambios aquí..." : "Describe esta sección con tu propio estilo..."}
+            className="w-full p-2 text-sm bg-white border border-slate-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+            rows={4}
+            disabled={disabled}
+        />
         {isInReviewLoop ? (
             <div className="grid grid-cols-2 gap-2">
                 <button 

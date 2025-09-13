@@ -277,7 +277,7 @@ Dicta o escribe tu versión del siguiente texto original.`,
 
   return (
     <div className="flex h-screen font-sans antialiased text-slate-800">
-      <div className="w-1/3 max-w-md h-screen flex-shrink-0">
+      <div className="w-2/5 max-w-lg h-screen flex-shrink-0">
         <ChatPanel 
             messages={messages} 
             onFileUpload={handleFileUpload}
