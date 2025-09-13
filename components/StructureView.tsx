@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { generateDocumentStructure } from '../services/geminiService';
-import { Loader2, Wand2, CheckCircle } from 'lucide-react';
+import { Loader2, Wand2, CheckCircle, RefreshCw } from 'lucide-react';
 import type { DocumentData } from '../types';
 
 interface StructureViewProps {
@@ -13,26 +12,42 @@ interface StructureViewProps {
 const StructureView: React.FC<StructureViewProps> = ({ document, onStructureApproved, onProcessingError }) => {
   const [structure, setStructure] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
-    const getStructure = async () => {
+    const getInitialStructure = async () => {
       try {
         setIsLoading(true);
         const generatedStructure = await generateDocumentStructure(document.originalText);
         setStructure(generatedStructure);
       } catch (error) {
-        console.error("Error generating document structure:", error);
+        console.error("Error generating initial document structure:", error);
         onProcessingError("No se pudo generar una estructura para el documento. Por favor, intenta empezar de nuevo.");
       } finally {
         setIsLoading(false);
       }
     };
-    getStructure();
+    getInitialStructure();
   }, [document.originalText, onProcessingError]);
 
   const handleApprove = () => {
     if (structure) {
       onStructureApproved(structure);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!feedback.trim()) return;
+    try {
+        setIsLoading(true);
+        const newStructure = await generateDocumentStructure(document.originalText, feedback);
+        setStructure(newStructure);
+        setFeedback(''); // Clear input after submission
+    } catch (error) {
+        console.error("Error regenerating document structure:", error);
+        onProcessingError("No se pudo regenerar la estructura. Por favor, intenta de nuevo.");
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -74,18 +89,43 @@ const StructureView: React.FC<StructureViewProps> = ({ document, onStructureAppr
       )}
 
       {structure && !isLoading && (
-        <div className="p-6 border border-slate-200 rounded-lg bg-slate-50 max-h-[50vh] overflow-y-auto">
-          <div className="prose prose-slate max-w-none">
-              <ul>{renderStructure(structure)}</ul>
-          </div>
-        </div>
+        <>
+            <div className="p-6 border border-slate-200 rounded-lg bg-slate-50 max-h-[50vh] overflow-y-auto">
+                <div className="prose prose-slate max-w-none">
+                    <ul>{renderStructure(structure)}</ul>
+                </div>
+            </div>
+            <div className="mt-6">
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">Hacer ajustes</h3>
+                <p className="text-sm text-slate-500 mb-3">
+                    Si quieres cambiar algo, escribe tus observaciones a continuación y regeneraré la estructura.
+                </p>
+                <textarea
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    placeholder="Ej: 'Combina la sección 2 y 3', 'Añade un punto sobre el impacto futuro', etc."
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                    rows={3}
+                    disabled={isLoading}
+                    aria-label="Observaciones para regenerar la estructura"
+                />
+            </div>
+        </>
       )}
 
       {!isLoading && structure && (
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex flex-col sm:flex-row justify-end gap-3">
+           <button
+            onClick={handleRegenerate}
+            disabled={!feedback.trim() || isLoading}
+            className="flex items-center justify-center gap-2 px-6 py-3 text-md font-semibold text-blue-600 bg-white border border-blue-600 rounded-lg hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className="h-5 w-5" />
+            Regenerar con Observaciones
+          </button>
           <button
             onClick={handleApprove}
-            className="flex items-center gap-2 px-6 py-3 text-md font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            className="flex items-center justify-center gap-2 px-6 py-3 text-md font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
           >
             <CheckCircle className="h-5 w-5" />
             Aprobar y Empezar a Escribir
