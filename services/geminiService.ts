@@ -1,154 +1,76 @@
-
 import { GoogleGenAI } from "@google/genai";
 
+// Ensure process.env.API_KEY is defined in your environment
 if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+    throw new Error("API_KEY environment variable not set.");
 }
-
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const extractSectionFromDocument = async (sectionTitle: string, documentText: string): Promise<string> => {
-  try {
-    const prompt = `
-      Eres un experto investigador y redactor académico. Tu tarea es analizar un documento base y extraer la información relevante para una sección específica de un artículo científico.
-      A partir del siguiente documento, extrae y resume el contenido correspondiente a la sección "${sectionTitle}".
-      Genera un párrafo conciso y bien redactado en español.
-      Si no encuentras información explícita para esta sección en el documento, indica claramente diciendo "No se encontró información relevante para esta sección en el documento proporcionado.".
-      No agregues ningún comentario adicional ni frases introductorias.
+const SYSTEM_INSTRUCTION_STRUCTURE = `Eres un editor experto en estructuración de contenido. Tu tarea es analizar el documento proporcionado y proponer una estructura o esquema claro, lógico y mejorado. El objetivo es ayudar al autor a reorganizar sus ideas para un mejor flujo e impacto. Presenta el esquema utilizando encabezados de markdown (ej: '# Título Principal', '## Subtítulo') y listas con viñetas (ej: '* Punto 1'). No reescribas el contenido, solo proporciona la nueva estructura. Responde únicamente con la estructura propuesta.`;
 
-      Documento:
-      """
-      ${documentText}
-      """
-    `;
+const SYSTEM_INSTRUCTION_ANALYSIS = `Eres un asistente de escritura. El usuario ha aprobado la siguiente estructura para su documento. Basándote en el documento original y en esta nueva estructura, tu tarea es hacer una pregunta inicial, atractiva y abierta para que el usuario comience a escribir la primera sección del nuevo esquema con sus propias palabras. Responde únicamente con la pregunta.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-    
-    return response.text;
-  } catch (error) {
-    console.error(`Error extracting section "${sectionTitle}":`, error);
-    return `Lo siento, ha ocurrido un error al procesar la sección "${sectionTitle}".`;
-  }
-};
+const SYSTEM_INSTRUCTION_IMPROVEMENT = `Eres un asistente de escritura colaborativo. El usuario está reescribiendo un documento siguiendo una estructura acordada. Has recibido su último borrador para una sección. Tu tarea es: 1. Mejorar la redacción, la claridad y el flujo del texto del usuario, manteniendo su voz y estilo originales. 2. Devolver SOLO el párrafo o sección mejorada. 3. Después del texto mejorado, en una nueva línea y precedido por '>>', haz una pregunta de seguimiento para guiar al usuario a escribir la siguiente sección del documento, basándote en la estructura general. Tu respuesta DEBE seguir el formato de 'Párrafo mejorado.\\n>> Pregunta de seguimiento.'`;
 
-export const polishSectionWithAI = async (originalText: string, userText: string, sectionTitle: string): Promise<string> => {
-  try {
-    const prompt = `
-      Eres un editor académico experto. Tu tarea es sintetizar dos versiones de una sección de un artículo científico en una única versión pulida.
-      
-      Debes lograr los siguientes objetivos:
-      1.  **Adoptar el Estilo del Usuario:** La versión final debe reflejar el tono, la voz y el estilo de la "Versión del Usuario". Esta es la prioridad principal.
-      2.  **Preservar Información Clave:** Asegúrate de que todos los datos, conceptos y puntos cruciales de la "Versión Original" se mantengan en el resultado final. No se debe perder información importante.
-      3.  **Coherencia y Fluidez:** El resultado debe ser un texto coherente, bien redactado y fluido en español.
-      4.  **No Añadir Contenido Nuevo:** No inventes información. Trabaja únicamente con el contenido proporcionado en las dos versiones.
-      5.  **Respuesta Directa:** Genera únicamente el texto pulido final, sin frases introductorias como "Aquí está la versión pulida:" ni comentarios adicionales.
 
-      **Sección a Trabajar:** ${sectionTitle}
-
-      **Versión Original (Contenido base):**
-      """
-      ${originalText}
-      """
-
-      **Versión del Usuario (Estilo a seguir):**
-      """
-      ${userText}
-      """
-
-      Ahora, genera la versión final pulida.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-
-    return response.text;
-  } catch (error) {
-    console.error(`Error polishing section "${sectionTitle}":`, error);
-    return `Hubo un error al pulir esta sección. Por favor, inténtalo de nuevo.
-
-${userText}`; // Return user's text as fallback
-  }
-};
-
-export const generateImprovementSuggestions = async (originalText: string, polishedText: string): Promise<string> => {
-    if (!originalText || !originalText.trim()) {
-        return "No hay texto original con el que comparar, ¡así que parece que vas por buen camino! Cuando estés listo, acepta y continúa.";
-    }
-
+export const generateDocumentStructure = async (documentText: string): Promise<string> => {
     try {
-        const prompt = `
-            Eres un revisor académico y editor experto. Tu tarea es comparar una "Versión Original" de una sección de un artículo con una "Versión Pulida" creada por un usuario y proporcionar sugerencias para mejorarla.
-
-            Tu objetivo es asegurar que la "Versión Pulida" no haya perdido ninguna información crítica o matiz importante de la "Versión Original", y al mismo tiempo, fortalecerla con rigor académico.
-
-            Instrucciones:
-            1.  Compara cuidadosamente ambos textos.
-            2.  Identifica si algún dato, concepto, cifra o argumento clave de la "Versión Original" fue omitido o simplificado en exceso en la "Versión Pulida".
-            3.  Proporciona una lista de 2-3 sugerencias constructivas y específicas. Cada sugerencia debe ser clara y accionable.
-            4.  **Sugerir Citas:** Si el argumento del texto puede ser fortalecido, sugiere 1-2 **citas reales** y relevantes de la literatura académica. Formatea las citas en estilo APA 7 dentro del texto, por ejemplo: "(Smith, 2021)". Explica brevemente por qué la cita es relevante.
-            5.  Si la "Versión Pulida" es excelente y ha integrado bien toda la información clave, elógiala y menciona que no se necesitan cambios críticos.
-            6.  Tu tono debe ser de apoyo y colaborativo, no crítico.
-            7.  Responde en español y usa markdown para formatear la lista (ej: "- Sugerencia 1...").
-
-            **Versión Original (Fuente de la verdad):**
-            """
-            ${originalText}
-            """
-
-            **Versión Pulida (A revisar):**
-            """
-            ${polishedText}
-            """
-
-            Ahora, genera tus sugerencias de mejora.
-        `;
-
+        const truncatedText = documentText.slice(0, 15000);
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: prompt,
+            contents: `Analiza el siguiente documento y propón una nueva estructura:\n\n---\n\n${truncatedText}`,
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION_STRUCTURE,
+                temperature: 0.5,
+            },
         });
-
-        return response.text;
+        return response.text.trim();
     } catch (error) {
-        console.error("Error generating suggestions:", error);
-        return "No pude generar sugerencias en este momento. Por favor, revisa el texto tú mismo y continúa cuando estés listo.";
+        console.error("Error generating document structure:", error);
+        throw new Error("No se pudo generar una estructura para el documento.");
     }
 };
 
-export const generateReferencesSection = async (articleContent: string): Promise<string> => {
+
+export const generateInitialQuestions = async (documentText: string, structure: string): Promise<string> => {
     try {
-        const prompt = `
-            Eres un bibliotecario de investigación y experto en redacción académica. Tu tarea es generar una lista de referencias bibliográficas completa y precisa basada en el contenido de un artículo académico.
-
-            Instrucciones:
-            1.  **Analiza el Contenido:** Lee cuidadosamente el siguiente artículo completo.
-            2.  **Identifica Fuentes Clave:** Identifica los conceptos, teorías y datos clave mencionados en el artículo que requerirían citas y referencias.
-            3.  **Genera Referencias Reales:** Crea una lista de 5 a 10 referencias bibliográficas utilizando fuentes académicas **reales** (artículos de revistas, libros, actas de congresos). No inventes fuentes.
-            4.  **Formato APA 7:** Formatea cada entrada de la lista de referencias estrictamente en estilo APA 7.
-            5.  **Relevancia:** Asegúrate de que cada referencia sea directamente relevante para el contenido del artículo.
-            6.  **Respuesta Directa:** Genera únicamente la lista de referencias, sin añadir títulos, encabezados como "Referencias" o frases introductorias. Cada referencia debe estar en una nueva línea.
-
-            **Artículo Completo:**
-            """
-            ${articleContent}
-            """
-
-            Ahora, genera la lista de referencias bibliográficas.
-        `;
-
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: prompt,
+            contents: `Documento Original (para contexto):\n"${documentText.slice(0, 2000)}..."\n\nEstructura Aprobada:\n${structure}\n\nGenera la pregunta inicial.`,
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION_ANALYSIS,
+                temperature: 0.7,
+            },
         });
-
         return response.text;
     } catch (error) {
-        console.error("Error generating references:", error);
-        return "No se pudo generar la lista de referencias en este momento. Puedes intentar de nuevo más tarde o añadirla manualmente.";
+        console.error("Error generating initial questions:", error);
+        return "Lo siento, tuve un problema. ¿Podrías empezar describiendo la primera sección de tu nueva estructura con tus propias palabras?";
+    }
+};
+
+export const improveUserResponse = async (userResponse: string, originalContext: string, rewrittenText: string, structure: string): Promise<{ suggestion: string; followupQuestion: string; }> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Estructura general del documento:\n"${structure}"\n\nContexto del documento original:\n"${originalContext.slice(0, 1000)}..."\n\nTexto reescrito hasta ahora:\n"${rewrittenText.slice(-2000)}"\n\nRespuesta del usuario para mejorar y continuar:\n"${userResponse}"`,
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION_IMPROVEMENT,
+                temperature: 0.7,
+            },
+        });
+        const fullText = response.text;
+        const parts = fullText.split('\n>> ');
+
+        const suggestion = parts[0].trim();
+        const followupQuestion = parts.length > 1 ? parts[1].trim() : '¿Qué te gustaría escribir a continuación?'; // Default follow-up
+
+        return { suggestion, followupQuestion };
+    } catch (error) {
+        console.error("Error improving user response:", error);
+        return {
+            suggestion: "No pude procesar esa respuesta. Por favor, intenta reformularla.",
+            followupQuestion: "¿Podrías intentar describir esa parte de nuevo?"
+        };
     }
 };

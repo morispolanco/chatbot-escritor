@@ -1,5 +1,5 @@
 {
-  "name": "Chatbot Escritor",
-  "description": "An interactive assistant for writing scientific or academic articles, guiding the user through structured questions to build a complete article. The chatbot uses an AI to understand and organize user responses, generating coherent content that can be exported to a Word document.",
+  "name": "Chatbot Asistente de Escritura",
+  "description": "An application to help users improve AI-generated texts. Users can upload Word or PDF documents, and a chatbot will assist in rewriting the content in the user's personal style through an interactive process.",
   "requestFramePermissions": []
 }
