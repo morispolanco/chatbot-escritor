@@ -1,5 +1,7 @@
 {
   "name": "Chatbot Asistente de Escritura",
   "description": "An application to help users improve AI-generated texts. Users can upload Word or PDF documents, and a chatbot will assist in rewriting the content in the user's personal style through an interactive process.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

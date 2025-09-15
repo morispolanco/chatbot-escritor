@@ -1,9 +1,61 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { ChatMessage } from '../types';
 import { generateInitialQuestions, improveUserResponse } from '../services/geminiService';
 import ChatMessageBubble from './ChatMessageBubble';
-import { SendHorizonal, Bot } from 'lucide-react';
+import { SendHorizonal, Bot, Mic } from 'lucide-react';
+
+// For SpeechRecognition API, which may not be in standard TS DOM library
+// Fix: Replaced incomplete/incorrect declarations with a complete set for Web Speech API.
+declare global {
+    interface Window {
+        SpeechRecognition: typeof SpeechRecognition;
+        webkitSpeechRecognition: typeof SpeechRecognition;
+    }
+
+    interface SpeechRecognition extends EventTarget {
+        lang: string;
+        continuous: boolean;
+        interimResults: boolean;
+        onresult: (event: SpeechRecognitionEvent) => void;
+        onerror: (event: SpeechRecognitionErrorEvent) => void;
+        onstart: () => void;
+        onend: () => void;
+        start(): void;
+        stop(): void;
+    }
+
+    var SpeechRecognition: {
+        prototype: SpeechRecognition;
+        new(): SpeechRecognition;
+    };
+    
+    var webkitSpeechRecognition: {
+        prototype: SpeechRecognition;
+        new(): SpeechRecognition;
+    };
+
+    interface SpeechRecognitionEvent extends Event {
+        results: SpeechRecognitionResultList;
+        resultIndex: number;
+    }
+    interface SpeechRecognitionErrorEvent extends Event {
+        error: string;
+    }
+    interface SpeechRecognitionResultList {
+        [index: number]: SpeechRecognitionResult;
+        length: number;
+    }
+    interface SpeechRecognitionResult {
+        [index: number]: SpeechRecognitionAlternative;
+        length: number;
+        isFinal: boolean;
+    }
+    interface SpeechRecognitionAlternative {
+        transcript: string;
+        confidence: number;
+    }
+}
+
 
 interface ChatbotProps {
   documentText: string;
@@ -19,6 +71,10 @@ const Chatbot: React.FC<ChatbotProps> = ({ documentText, improvedText, structure
   const [nextQuestion, setNextQuestion] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const textBeforeListening = useRef<string>('');
+
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -28,7 +84,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ documentText, improvedText, structure
   const addMessage = useCallback((sender: 'user' | 'bot' | 'system', text: string, suggestion?: string) => {
     setMessages(prev => [...prev, { id: Date.now().toString() + Math.random(), sender, text, suggestion }]);
   }, []);
-
 
   useEffect(() => {
     const fetchInitialQuestion = async () => {
@@ -40,10 +95,66 @@ const Chatbot: React.FC<ChatbotProps> = ({ documentText, improvedText, structure
 
     fetchInitialQuestion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentText, structure]); // Run only when document and structure are available.
+  }, [documentText, structure]);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("Speech Recognition API is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const currentTranscript = Array.from(event.results)
+        .map(result => result[0].transcript)
+        .join('');
+      setUserInput(textBeforeListening.current + currentTranscript);
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error("Speech recognition error:", event.error);
+    };
+    
+    recognition.onstart = () => {
+        setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
+  const handleToggleListening = useCallback(() => {
+    if (!recognitionRef.current) return;
+    
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      textBeforeListening.current = userInput ? `${userInput} ` : '';
+      try {
+        recognitionRef.current.start();
+      } catch(e) {
+        console.error("Could not start recognition", e);
+      }
+    }
+  }, [isListening, userInput]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isListening) {
+        recognitionRef.current?.stop();
+    }
     if (!userInput.trim() || isLoading) return;
 
     const newUserMessage = userInput;
@@ -80,7 +191,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ documentText, improvedText, structure
           {messages.map((msg) => (
             <ChatMessageBubble key={msg.id} message={msg} onApprove={handleApprove}/>
           ))}
-          {isLoading && (
+          {isLoading && !messages.some(m => m.sender !== 'system') && (
              <div className="flex justify-start">
                 <div className="bg-slate-200 rounded-lg p-3 max-w-sm">
                     <div className="flex items-center space-x-2">
@@ -100,10 +211,23 @@ const Chatbot: React.FC<ChatbotProps> = ({ documentText, improvedText, structure
             type="text"
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
-            placeholder="Escribe tu respuesta aquí..."
+            placeholder={isListening ? "Escuchando..." : "Escribe tu respuesta aquí..."}
             className="flex-grow w-full px-4 py-2 border border-slate-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={isLoading}
           />
+          <button
+            type="button"
+            onClick={handleToggleListening}
+            disabled={isLoading}
+            className={`p-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-slate-300 disabled:cursor-not-allowed ${
+              isListening
+                ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+            }`}
+            aria-label={isListening ? 'Detener dictado' : 'Iniciar dictado'}
+          >
+            <Mic className="h-5 w-5" />
+          </button>
           <button
             type="submit"
             disabled={isLoading || !userInput.trim()}
