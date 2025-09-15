@@ -43,16 +43,21 @@ declare global {
     }
     interface SpeechRecognitionResultList {
         [index: number]: SpeechRecognitionResult;
-        length: number;
+        // FIX: Added readonly modifier to match built-in TypeScript DOM library definitions.
+        readonly length: number;
     }
     interface SpeechRecognitionResult {
         [index: number]: SpeechRecognitionAlternative;
-        length: number;
-        isFinal: boolean;
+        // FIX: Added readonly modifier to match built-in TypeScript DOM library definitions.
+        readonly length: number;
+        // FIX: Added readonly modifier to match built-in TypeScript DOM library definitions.
+        readonly isFinal: boolean;
     }
     interface SpeechRecognitionAlternative {
-        transcript: string;
-        confidence: number;
+        // FIX: Added readonly modifier to match built-in TypeScript DOM library definitions.
+        readonly transcript: string;
+        // FIX: Added readonly modifier to match built-in TypeScript DOM library definitions.
+        readonly confidence: number;
     }
 }
 
@@ -110,10 +115,14 @@ const Chatbot: React.FC<ChatbotProps> = ({ documentText, improvedText, structure
     recognition.interimResults = true;
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const currentTranscript = Array.from(event.results)
-        .map(result => result[0].transcript)
-        .join('');
-      setUserInput(textBeforeListening.current + currentTranscript);
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+      
+      setUserInput(prev => (textBeforeListening.current + finalTranscript).trim());
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -206,35 +215,43 @@ const Chatbot: React.FC<ChatbotProps> = ({ documentText, improvedText, structure
         </div>
       </div>
       <div className="p-4 border-t border-slate-200 bg-white">
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
+        <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <textarea
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
             placeholder={isListening ? "Escuchando..." : "Escribe tu respuesta aquí..."}
-            className="flex-grow w-full px-4 py-2 border border-slate-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-grow w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
             disabled={isLoading}
+            rows={10}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e as any);
+                }
+            }}
           />
-          <button
-            type="button"
-            onClick={handleToggleListening}
-            disabled={isLoading}
-            className={`p-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-slate-300 disabled:cursor-not-allowed ${
-              isListening
-                ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
-                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-            }`}
-            aria-label={isListening ? 'Detener dictado' : 'Iniciar dictado'}
-          >
-            <Mic className="h-5 w-5" />
-          </button>
-          <button
-            type="submit"
-            disabled={isLoading || !userInput.trim()}
-            className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
-          >
-            <SendHorizonal className="h-5 w-5" />
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+                type="button"
+                onClick={handleToggleListening}
+                disabled={isLoading}
+                className={`p-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-slate-300 disabled:cursor-not-allowed ${
+                isListening
+                    ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                }`}
+                aria-label={isListening ? 'Detener dictado' : 'Iniciar dictado'}
+            >
+                <Mic className="h-5 w-5" />
+            </button>
+            <button
+                type="submit"
+                disabled={isLoading || !userInput.trim()}
+                className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+            >
+                <SendHorizonal className="h-5 w-5" />
+            </button>
+          </div>
         </form>
       </div>
     </div>
